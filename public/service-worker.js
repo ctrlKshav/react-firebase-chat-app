@@ -1,105 +1,49 @@
-﻿// service-worker.js
-importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js');
+﻿const CACHE_NAME = "chat-app-cache-v1";
+const urlsToCache = [
+  "/",
+  "/index.html",
+  "/static/js/bundle.js",
+  "/static/js/main.*.js", // Main React JS file (update based on your build)
+  "/static/css/main.*.css", // Main CSS file (update based on your build)
+  "/chatapp.png",  // App icon
+  "/manifest.webmanifest", // PWA manifest
+];
 
-// Set debug to false in production
-workbox.setConfig({ debug: true });
 
-// Custom precaching list for critical resources
-workbox.precaching.precacheAndRoute([
-  { url: '/', revision: null },
-  { url: '/index.html', revision: null },
-  { url: '/manifest.json', revision: null },
-  { url: '/favicon.ico', revision: null },
-  { url: '/chatapp.png', revision: null }
-]);
-
-// Special handling for manifest.json
-workbox.routing.registerRoute(
-  ({ url }) => url.pathname.endsWith('manifest.json'),
-  new workbox.strategies.StaleWhileRevalidate({
-    cacheName: 'manifest-cache',
-    plugins: [
-      new workbox.expiration.ExpirationPlugin({
-        maxEntries: 1, // Only cache one version of the manifest
-        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-      }),
-      new workbox.cacheableResponse.CacheableResponsePlugin({
-        statuses: [0, 200], // Cache successful responses and opaque responses
-      })
-    ]
-  })
-);
-
-// Cache JS and CSS files with a Cache First strategy
-workbox.routing.registerRoute(
-  ({ request }) => 
-    request.destination === 'script' || 
-    request.destination === 'style',
-  new workbox.strategies.CacheFirst({
-    cacheName: 'static-resources',
-    plugins: [
-      new workbox.expiration.ExpirationPlugin({
-        maxEntries: 30,
-        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-      }),
-    ],
-  })
-);
-
-// Cache images with a Cache First strategy
-workbox.routing.registerRoute(
-  ({ request }) => request.destination === 'image',
-  new workbox.strategies.CacheFirst({
-    cacheName: 'image-cache',
-    plugins: [
-      new workbox.expiration.ExpirationPlugin({
-        maxEntries: 60,
-        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-      }),
-    ],
-  })
-);
-
-// Use Network First for API calls
-workbox.routing.registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/'),
-  new workbox.strategies.NetworkFirst({
-    cacheName: 'api-cache',
-    plugins: [
-      new workbox.expiration.ExpirationPlugin({
-        maxEntries: 50,
-        maxAgeSeconds: 5 * 60, // 5 minutes
-      }),
-    ],
-  })
-);
-
-// Default strategy for everything else - Stale While Revalidate
-workbox.routing.setDefaultHandler(
-  new workbox.strategies.StaleWhileRevalidate({
-    cacheName: 'default-cache',
-  })
-);
-
-// Offline fallback
-workbox.routing.setCatchHandler(({ event }) => {
-  // Return the precached offline page if a document is being requested
-  if (event.request.destination === 'document') {
-    return workbox.precaching.matchPrecache('/index.html');
-  }
-  
-  return Response.error();
+// Install Service Worker
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log("[Service Worker] Caching files...");
+      return cache.addAll(urlsToCache);
+    })
+  );
 });
 
-// Skip waiting and clients claim to update service worker faster
-self.skipWaiting();
-workbox.core.clientsClaim();
-
-// Listen for messages from clients
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+// Activate Service Worker (Cleanup Old Caches)
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames
+          .filter((name) => name !== CACHE_NAME)
+          .map((name) => caches.delete(name))
+      );
+    })
+  );
+  console.log("[Service Worker] Activated.");
 });
 
-console.log('Workbox Service Worker loaded!');
+// Fetch Request Handling
+self.addEventListener("fetch", (event) => {
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      return cachedResponse || fetch(event.request).catch(() => {
+        // Return index.html for non-cached routes (helps with Firebase hosting issues)
+        if (event.request.mode === "navigate") {
+          return caches.match("/index.html");
+        }
+      });
+    })
+  );
+});

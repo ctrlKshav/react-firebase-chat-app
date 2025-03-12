@@ -34,3 +34,18 @@ self.addEventListener("activate", (event) => {
     })
   );
 });
+
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open("chat-app-cache").then((cache) => {
+      return cache.addAll(["/", "/index.html"]);
+    })
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match(event.request))
+  );
+});

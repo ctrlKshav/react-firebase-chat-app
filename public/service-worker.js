@@ -2,50 +2,48 @@
 const urlsToCache = [
   "/",
   "/index.html",
+  "/static/js/bundle.js",
+  "/static/js/main.*.js", // Main React JS file (update based on your build)
+  "/static/css/main.*.css", // Main CSS file (update based on your build)
+  "/chatapp.png",  // App icon
+  "/manifest.json", // PWA manifest
 ];
+
 
 // Install Service Worker
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
+      console.log("[Service Worker] Caching files...");
       return cache.addAll(urlsToCache);
     })
   );
 });
 
-// Fetch Request Handling
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
-  );
-});
-
-// Activate Service Worker
+// Activate Service Worker (Cleanup Old Caches)
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
+        cacheNames
+          .filter((name) => name !== CACHE_NAME)
+          .map((name) => caches.delete(name))
       );
     })
   );
+  console.log("[Service Worker] Activated.");
 });
 
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open("chat-app-cache").then((cache) => {
-      return cache.addAll(["/", "/index.html"]);
-    })
-  );
-});
-
+// Fetch Request Handling
 self.addEventListener("fetch", (event) => {
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    caches.match(event.request).then((cachedResponse) => {
+      return cachedResponse || fetch(event.request).catch(() => {
+        // Return index.html for non-cached routes (helps with Firebase hosting issues)
+        if (event.request.mode === "navigate") {
+          return caches.match("/index.html");
+        }
+      });
+    })
   );
 });

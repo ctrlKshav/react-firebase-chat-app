@@ -2,9 +2,7 @@
 const urlsToCache = [
   "/",
   "/index.html",
-  "/static/js/bundle.js",
-  "/static/js/main.*.js", // Main React JS file (update based on your build)
-  "/static/css/main.*.css", // Main CSS file (update based on your build)
+  "/static",
   "/chatapp.png",  // App icon
   "/manifest.webmanifest", // PWA manifest
 ];
